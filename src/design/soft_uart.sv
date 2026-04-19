@@ -1,5 +1,6 @@
 module soft_uart#(
-    parameter int FIFO_DEPTH = 16
+    parameter int FIFO_DEPTH=16,
+    parameter int DEBUG=0
 )(
     input logic sys_clk,
     input logic reset,
@@ -48,7 +49,8 @@ module soft_uart#(
     assign regs[RX_BUFFER][7:0] = rx_data;
 
     soft_uart_rx#(
-        .DEPTH(FIFO_DEPTH)  
+        .DEPTH(FIFO_DEPTH),
+        .DEBUG(DEBUG)  
     ) uart_rx_inst(
         .sys_clk(sys_clk),
         .rx_clk(rx_clk),
@@ -72,7 +74,8 @@ module soft_uart#(
     assign tx_data = regs[TX_BUFFER][7:0];
 
     soft_uart_tx #(
-        .DEPTH(FIFO_DEPTH)
+        .DEPTH(FIFO_DEPTH),
+        .DEBUG(DEBUG)
     ) uart_tx_inst(
         .sys_clk(sys_clk),
         .tx_clk(tx_clk),
@@ -116,6 +119,7 @@ module soft_uart#(
         end
         else begin
             logic rx_read, tx_write, baud_load;
+            logic [7:0] tx_data;
 
             //pipeline both inputs and outputs for better timing
             ack_o_reg <= cyc_i_reg & stb_i_reg & (adr_i_valid <= 4'hA);
@@ -129,12 +133,13 @@ module soft_uart#(
             rx_read = 1'b0;
             tx_write = 1'b0;
             baud_load = 1'b0;
+            tx_data = 8'b0;
 
             if (cyc_i_reg & stb_i_reg) begin
                 if (we_i_reg) begin
                     unique case(adr_i_valid)
                         4'h0: begin //write to tx buffer
-                            regs[TX_BUFFER][7:0] <= dat_i_reg[7:0];
+                            tx_data = dat_i_reg[7:0];
                             tx_write = 1'b1;
                         end
                         4'h8: begin //write to the baud div reg
@@ -166,6 +171,7 @@ module soft_uart#(
                     4'hA: begin //read baud enable status
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[ENABLE_REG]};
                     end
+                    default: dat_o_reg <= '0;
                 endcase
 
             end
@@ -174,6 +180,7 @@ module soft_uart#(
             rx_read_fifo <= rx_read;
             tx_write_fifo <= tx_write;
             baud_gen_load <= baud_load;
+            regs[TX_BUFFER][7:0] <= tx_data;
 
         end
     end
@@ -183,7 +190,8 @@ endmodule
 
 
 module soft_uart_rx#(
-    parameter int DEPTH=16  
+    parameter int DEPTH=16,
+    parameter int DEBUG=0   
 )(
     input logic sys_clk,
     input logic rx_clk,
@@ -295,7 +303,7 @@ module soft_uart_rx#(
         .DEPTH(DEPTH), 
         .DATA_T(logic [7:0]),
         .FIFO_NAME("RX_FIFO"),
-        .DEBUG(1)
+        .DEBUG(DEBUG)
     ) fifo_inst(
         .rclk(sys_clk),
         .wclk(rx_clk),
@@ -313,7 +321,8 @@ endmodule
 
 
 module soft_uart_tx #(
-    parameter int DEPTH=16
+    parameter int DEPTH=16,
+    parameter int DEBUG=0
 )(
     input logic sys_clk,
     input logic tx_clk,
@@ -327,54 +336,60 @@ module soft_uart_tx #(
     output logic tx_full
 );
 
-    logic [7:0] shift_reg;
+    logic [7:0] shift_reg, tx_data;
     fsm_state current = IDLE, next;
     logic tx_wire;
     logic tx_start;
-    logic [3:0] bit_counter = 4'd0; 
+    logic send_bit;
+    logic [2:0] bit_counter = 3'd7; 
 
     assign tx_start = ~tx_empty && (current == IDLE || current == STOP);
 
     always@(posedge tx_clk) begin
         if(reset) begin
-            tx <= 1;
             current <= IDLE;
-            bit_counter <= 4'd0;
+            bit_counter <= 3'd7;
+            shift_reg <= '0;
         end
         else begin
-            tx <= tx_wire;
-            if(current == DATA)
-                bit_counter <= bit_counter + 1'b1;
-            else if(current == START)
-                bit_counter <= 4'd0;
+            current <= next;
+            if(current == START) begin
+                bit_counter <= 3'd7;
+                shift_reg <= tx_data;
+            end else if(send_bit) begin
+                bit_counter <= bit_counter - 1'b1;
+                shift_reg <= {1'b0, shift_reg[7:1]};
+            end
         end
     end
 
     always_comb begin
 
-        tx_wire = 1;
+        tx = 1;
         next = current;
+        send_bit = 0;
 
         unique case(current)
             IDLE: begin
-                tx_wire = 1;
+                tx = 1;
                 if (tx_start)
                     next = START;
             end
 
             START: begin
-                tx_wire = 0;
+                tx = 0;
                 next = DATA;
             end
 
             DATA: begin
-                tx_wire = shift_reg[bit_counter];
-                if(bit_counter == 4'd8)
+                tx = shift_reg[0];
+                send_bit = 1;
+                if(bit_counter == 3'd0)
                     next = STOP;
             end
 
             STOP: begin
-                tx_wire = 1;
+                tx = 1;
                 if(tx_start)
                     next = START;
                 else
@@ -391,7 +406,7 @@ module soft_uart_tx #(
         .DEPTH(DEPTH), 
         .DATA_T(logic [7:0]),
         .FIFO_NAME("TX_FIFO"),
-        .DEBUG(1)
+        .DEBUG(DEBUG)
     ) fifo_inst(
         .rclk(tx_clk),
         .wclk(sys_clk),
@@ -400,7 +415,7 @@ module soft_uart_tx #(
         .i_wr_en(write_fifo),    // Write enable
         .i_rd_en(tx_start),    // Read enable
         .i_data(data),     // Data written into FIFO
-        .o_data(shift_reg),     // Data read from FIFO
+        .o_data(tx_data),     // Data read from FIFO
         .o_empty(tx_empty),    // FIFO is empty when high
         .o_full(tx_full)     // FIFO is full when high,
     );
@@ -428,13 +443,13 @@ module baud_gen(
         end
         else if(ce) begin
             if(rx_counter == 0)
-                rx_counter <= div_reg >> 3;
+                rx_counter <= div_reg >> 4;
             else
                 rx_counter <= rx_counter - 1'b1;
             if(tx_counter == 0)
                 tx_counter <= div_reg;
             else
-                tx_counter <= rx_counter - 1'b1;
+                tx_counter <= tx_counter - 1'b1;
         end
     end
 
