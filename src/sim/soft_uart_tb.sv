@@ -50,7 +50,7 @@ module soft_uart_tb;
     // Task to drive a byte into the RX pin (simulating external device)
     // Assumes 8N1: 1 start bit (0), 8 data bits (LSB first), 1 stop bit (1)
     task automatic drive_external_rx(input [7:0] data, input int baud_div);
-        time bit_period = CLK_PERIOD * baud_div;
+        int bit_period = CLK_PERIOD * baud_div;
         
         $display("[External] Sending byte 0x%h to RX line", data);
         
@@ -72,6 +72,8 @@ module soft_uart_tb;
     // --- Main Test Sequence ---
     logic [31:0] read_data;
     int test_baud_div = 100; // Small value for faster simulation
+    logic [7:0] test_data [6] = {8'hDE, 8'hAD, 8'hBE, 8'hEF, 8'hC0, 8'hDE};
+
     initial begin
         // Initialize signals
         reset = 1;
@@ -98,12 +100,8 @@ module soft_uart_tb;
         wait(tx_done);
         $display("TX Done pulsed.");
 
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hDE);
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hAD);
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hBE);
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hEF);
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hC0);
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hDE);
+        foreach(test_data[i])
+            wb_bus.MasterWrite(ADDR_TX_BUF, 32'(test_data[i]));
         wait(tx_done);
         $display("TX Done pulsed.");
 
@@ -115,7 +113,7 @@ module soft_uart_tb;
 
         // Wait for RX Status bit 0 (Buffer_empty) to go low, or check rx_done
         wait(rx_done);
-        
+
         // Check Status Register
         wb_bus.MasterRead(ADDR_RX_STAT, read_data);
         if (read_data[0] == 0) begin // Bit 0 is Buffer_empty
@@ -123,13 +121,40 @@ module soft_uart_tb;
             wb_bus.MasterRead(ADDR_RX_BUF, read_data);
             if (read_data[7:0] == 8'h3C)
                 $display("SUCCESS: Received correct data 0x%h", read_data[7:0]);
-            else
+            else begin
                 $display("ERROR: Data mismatch! Received 0x%h", read_data[7:0]);
+                $stop;
+            end
+        end
+        else begin
+           $display("Nothing to read..."); 
+        end
+        
+        #(CLK_PERIOD);
+
+        foreach(test_data[i]) begin
+            drive_external_rx(test_data[i], test_baud_div);
         end
 
-        // 5. Test FIFO Clear
-        $display("--- Testing FIFO Clear ---");
-        wb_bus.MasterWrite(ADDR_CTRL_CLR, 32'h6); // Clear RX (bit 1) and TX (bit 2)
+
+        foreach(test_data[i]) begin
+            wb_bus.MasterRead(ADDR_RX_STAT, read_data);
+            if(read_data[0] == 1) begin //if empty wait for data to be received
+                wait(rx_done);
+            end   
+            wb_bus.MasterRead(ADDR_RX_BUF, read_data); 
+            if (read_data[7:0] == test_data[i])
+                $display("SUCCESS: Received correct data 0x%h", read_data[7:0]);
+            else begin
+                $display("ERROR: Data mismatch! Received 0x%h", read_data[7:0]);
+                $stop;
+            end
+        end
+
+        
+        //// 5. Test FIFO Clear
+        //$display("--- Testing FIFO Clear ---");
+        //wb_bus.MasterWrite(ADDR_CTRL_CLR, 32'h6); // Clear RX (bit 1) and TX (bit 2)
         
         #100;
         $display("Testbench Finished.");

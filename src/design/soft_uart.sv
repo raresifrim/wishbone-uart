@@ -205,13 +205,14 @@ module soft_uart_rx#(
     output logic rx_full
 );
 
-    logic [3:0] sample_counter = 4'b1111;
-    logic [3:0] bit_counter = 4'b0000;
+    logic [2:0] sample_counter = 3'b111;
+    logic [3:0] bit_counter = 4'd7;
     logic [7:0] shift_reg = 0;
     logic [1:0] rx_sync = 2'b11;
     logic count_enable, count_reset;
     logic collect_bit;
-    logic [2:0] vote_bits;
+    logic write_fifo;
+    logic [2:0] vote_bits = 3'b111;
     logic final_vote;
     fsm_state current = IDLE, next;
 
@@ -222,37 +223,40 @@ module soft_uart_rx#(
     
     always_ff@(posedge rx_clk) begin
         if(reset) begin
-            sample_counter <= 4'b1111;
+            sample_counter <= 3'b111;
             current <= IDLE;
             rx_sync <= 2'b11;
             shift_reg <= 0;
-            vote_bits <= 3'b0;
-            bit_counter <= 4'b0000;
+            vote_bits <= 3'b111;
+            bit_counter <= 4'd8;
         end
         else begin
             //fsm state updater
             current <= next;
            
-            if (sample_counter == 4'd7)
+            //colect votes
+            if (sample_counter == 3'd3)
                 vote_bits[0] <= rx_sync[1];
-            if (sample_counter == 4'd8)
+            if (sample_counter == 3'd4)
                 vote_bits[1] <= rx_sync[1];
-            if (sample_counter == 4'd9)
+            if (sample_counter == 3'd5)
                 vote_bits[2] <= rx_sync[1];
 
-            //sample counter 
+            //sample counter logic
             if(count_reset)
-                sample_counter <= 4'b1111;
+                sample_counter <= 3'b111;
             else if(count_enable)
                 sample_counter <= sample_counter - 1'b1;
 
-            if(current == START) begin
+            //reset shift reg and bit counter in IDLE state
+            //otherwise update them during data sampling
+            if(current == IDLE) begin
                 shift_reg <= 0;
-                bit_counter <= 0;
+                bit_counter <= 4'd8;
             end
             else if(current == DATA && collect_bit) begin
                 shift_reg <= {final_vote, shift_reg[7:1]};
-                bit_counter <= bit_counter + 1'b1;
+                bit_counter <= bit_counter - 1'b1;
             end
             
             //double-ff synchronizer
@@ -265,39 +269,38 @@ module soft_uart_rx#(
         
         count_reset = 0;
         count_enable = 0;
-        rx_int = 0;
+        write_fifo = 0;
 
         unique case(current)
             IDLE: begin
-                count_reset = 1;
                 if(!rx_sync[1])
-                    next = START;
-            end
-
-            START: begin
-                count_enable = 1;
-                if(collect_bit)
-                    if(!final_vote)
-                        next = DATA;
-                    else
-                        next = IDLE;
+                    count_enable = 1;
+                else
+                   count_reset = 1; 
+                if(collect_bit && !final_vote)
+                    next = DATA;
+                else
+                    next = IDLE;
             end
 
             DATA: begin
                 count_enable = 1; 
-                if(bit_counter == 4'd8)
+                if(bit_counter == 0)
                    next = STOP; 
             end
 
             STOP: begin
                 count_enable = 1;
-                if(collect_bit) begin
-                    next = IDLE; 
-                    rx_int = 1;
+                if(collect_bit || !rx_sync[1]) begin //jump to idle if stop bit is complete or early start bit detected
+                    next = IDLE;
+                    count_reset = 1;
+                    write_fifo = 1;
                 end
             end
         endcase
     end
+
+    assign rx_int = ~rx_empty; //keep interrupt until there is no more data available
 
     async_fifo #(
         .DEPTH(DEPTH), 
@@ -309,7 +312,7 @@ module soft_uart_rx#(
         .wclk(rx_clk),
         .rst(reset),
         .i_clear(clear_fifo),
-        .i_wr_en(rx_int),    // Write enable
+        .i_wr_en(write_fifo),    // Write enable
         .i_rd_en(read_fifo),    // Read enable
         .i_data(shift_reg),     // Data written into FIFO
         .o_data(data),     // Data read from FIFO
@@ -437,13 +440,13 @@ module baud_gen(
 
     always_ff@(posedge sys_clk) begin
         if(load) begin
-            rx_counter <= div >> 4;
+            rx_counter <= (div >> 3);
             tx_counter <= div;
             div_reg <= div;
         end
         else if(ce) begin
             if(rx_counter == 0)
-                rx_counter <= div_reg >> 4;
+                rx_counter <= (div_reg >> 3);
             else
                 rx_counter <= rx_counter - 1'b1;
             if(tx_counter == 0)
@@ -453,7 +456,7 @@ module baud_gen(
         end
     end
 
-    assign tx_clk = tx_counter > div_reg >> 1 ? 1'b1 : 1'b0;
-    assign rx_clk = rx_counter > div_reg >> 5 ? 1'b1 : 1'b0;
+    assign tx_clk = tx_counter > (div_reg >> 1) ? 1'b1 : 1'b0;
+    assign rx_clk = rx_counter > (div_reg >> 4) ? 1'b1 : 1'b0;
 
 endmodule

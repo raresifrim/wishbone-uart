@@ -65,10 +65,7 @@ module async_fifo #(
             rptr <= rbin;
             rgray <= (rbin >> 1) ^ rbin;
             o_empty <= w_empty;
-            if(i_rd_en && !o_empty)
-                o_data <= fifo[rptr[$clog2(DEPTH)-1:0]];
-            else
-                o_data <= '0;
+            o_data <= fifo[rptr[$clog2(DEPTH)-1:0]];
         end
     end
 
