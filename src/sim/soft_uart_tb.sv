@@ -136,7 +136,6 @@ module soft_uart_tb;
             drive_external_rx(test_data[i], test_baud_div);
         end
 
-
         foreach(test_data[i]) begin
             wb_bus.MasterRead(ADDR_RX_STAT, read_data);
             if(read_data[0] == 1) begin //if empty wait for data to be received
@@ -151,20 +150,45 @@ module soft_uart_tb;
             end
         end
 
+        #(CLK_PERIOD * 10 * test_baud_div); //make sure one last date frame time has passed for last dataframe transmitted
+
+        // 5. Test FIFO Clear
+        $display("--- Testing FIFO Clear ---");
+        wb_bus.MasterWrite(ADDR_CTRL_CLR, 32'h3); // Clear RX (bit 0) and TX (bit 1)
+        #(2 * CLK_PERIOD);
+        if(dut.uart_rx_inst.fifo_inst.wptr != 0 || dut.uart_rx_inst.fifo_inst.rptr != 0) begin
+            $display("ERROR: RX FIFO was not cleared!");
+            $stop;
+        end
+        if(dut.uart_tx_inst.fifo_inst.wptr != 0 || dut.uart_tx_inst.fifo_inst.rptr != 0) begin
+            $display("ERROR: RX FIFO was not cleared!");
+            $stop;
+        end
         
-        //// 5. Test FIFO Clear
-        //$display("--- Testing FIFO Clear ---");
-        //wb_bus.MasterWrite(ADDR_CTRL_CLR, 32'h6); // Clear RX (bit 1) and TX (bit 2)
-        
-        #100;
+
         $display("Testbench Finished.");
         $finish;
     end
 
-    // Monitor for debug
+    bit [7:0] received_char;
     initial begin
-        $monitor("Time: %0t | TX: %b | RX: %b | RX_DONE: %b | TX_DONE: %b", 
-                 $time, tx, rx, rx_done, tx_done);
+        #(CLK_PERIOD * 10); //wait for reset to kick in and do its job
+        forever begin
+            wait(tx == 0) //wait for start bit
+            #(CLK_PERIOD * test_baud_div); 
+            
+            //collect data
+            for(int j=0;j<8;j++) begin
+                #(CLK_PERIOD * test_baud_div/2); 
+                received_char[j] = tx; //sample at half 
+                #(CLK_PERIOD * test_baud_div/2); 
+            end
+
+            $display("Received char %X", received_char);
+
+            //wait for stop bit
+            #(CLK_PERIOD * test_baud_div);
+        end
     end
 
 endmodule

@@ -20,24 +20,28 @@ module async_fifo #(
     logic [$clog2(DEPTH):0] wptr, wgray, wsync1, wsync2;
     logic [$clog2(DEPTH):0] rptr, rgray, rsync1, rsync2; 
     logic w_empty, w_full;
+    logic nreset;
     DATA_T fifo [DEPTH];
 
-    always_ff@(posedge rclk) begin
-        if(rst || i_clear) 
+    logic master_reset;
+    assign master_reset = (rst || i_clear);
+
+    always_ff@(posedge rclk, posedge master_reset) begin
+        if(master_reset) 
             {wsync2,wsync1} <= 0; 
         else
             {wsync2,wsync1} <= {wsync1, wgray}; 
     end
 
-    always_ff@(posedge wclk) begin
-        if(rst || i_clear) 
+    always_ff@(posedge wclk, posedge master_reset) begin
+        if(master_reset) 
             {rsync2,rsync1} <= 0; 
         else
             {rsync2,rsync1} <= {rsync1, rgray}; 
     end
 
-    always_ff @(posedge wclk) begin
-        if (rst || i_clear) begin
+    always_ff @(posedge wclk, posedge master_reset) begin
+        if (master_reset) begin
             wptr <= 0;
             wgray <= 0;
             o_full <= 0;
@@ -52,8 +56,8 @@ module async_fifo #(
         end 
     end
 
-    always_ff @(posedge rclk) begin
-        if (rst || i_clear) begin
+    always_ff @(posedge rclk, posedge master_reset) begin
+        if (master_reset) begin
             rptr <= 0;
             rgray <= 0;
             o_empty <= 0;

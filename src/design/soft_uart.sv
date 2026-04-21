@@ -26,6 +26,13 @@ module soft_uart#(
     //ENABLE CONTROL BITS: 1-Clear_RX_fifo 2-Clear_TX_fifo
 
     enum bit [2:0] {TX_BUFFER, TX_STATUS, RX_BUFFER, RX_STATUS, BAUD_DIV, ENABLE_REG, CLEAR_REG} CAS;
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_TX_BUF    = wbif.ADDR_WIDTH'(0);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_TX_STAT   = wbif.ADDR_WIDTH'(2);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_RX_BUF    = wbif.ADDR_WIDTH'(4);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_RX_STAT   = wbif.ADDR_WIDTH'(6);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_BAUD_DIV  = wbif.ADDR_WIDTH'(8);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_CTRL_EN   = wbif.ADDR_WIDTH'(10);
+    localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_CTRL_CLR  = wbif.ADDR_WIDTH'(12);
 
     data_t dat_o_reg = '0;
     data_t dat_i_reg = '0;
@@ -38,7 +45,7 @@ module soft_uart#(
     assign wbif.data_rd = dat_o_reg;
     assign wbif.ack = ack_o_reg;
     assign wbif.stall = 1'b0; //no actual stall required
-    assign wbif.err = cyc_i_reg && stb_i_reg && (adr_i_valid > 4'hA);
+    assign wbif.err = cyc_i_reg && stb_i_reg && (adr_i_valid > ADDR_CTRL_CLR);
 
     logic rx_clear_fifo, rx_read_fifo, rx_empty, rx_full, rx_reset;
     logic [7:0] rx_data;
@@ -120,9 +127,10 @@ module soft_uart#(
         else begin
             logic rx_read, tx_write, baud_load;
             logic [7:0] tx_data;
+            logic [7:0] clear_reg;
 
             //pipeline both inputs and outputs for better timing
-            ack_o_reg <= cyc_i_reg & stb_i_reg & (adr_i_valid <= 4'hA);
+            ack_o_reg <= cyc_i_reg & stb_i_reg & (adr_i_valid <= ADDR_CTRL_CLR);
             adr_i_valid <= wbif.addr;
             cyc_i_reg <= wbif.cyc;
             stb_i_reg <= wbif.stb;
@@ -134,41 +142,42 @@ module soft_uart#(
             tx_write = 1'b0;
             baud_load = 1'b0;
             tx_data = 8'b0;
-
+            clear_reg = 0;
+            
             if (cyc_i_reg & stb_i_reg) begin
                 if (we_i_reg) begin
                     unique case(adr_i_valid)
-                        4'h0: begin //write to tx buffer
+                        ADDR_TX_BUF: begin //write to tx buffer
                             tx_data = dat_i_reg[7:0];
                             tx_write = 1'b1;
                         end
-                        4'h8: begin //write to the baud div reg
+                        ADDR_BAUD_DIV: begin //write to the baud div reg
                             regs[BAUD_DIV] <= dat_i_reg[15:0];
                             baud_load = 1'b1;
                         end
-                        4'hA: begin //write to the the enable reg
+                        ADDR_CTRL_EN: begin //write to the the enable reg
                             regs[ENABLE_REG][7:0] <= dat_i_reg[7:0];
                         end
-                        4'hC: begin //write to the the clear reg
-                            regs[CLEAR_REG][7:0] <= dat_i_reg[7:0];
+                        ADDR_CTRL_CLR: begin //write to the the clear reg
+                            clear_reg = dat_i_reg[7:0];
                         end
                     endcase
                 end
                 unique case(adr_i_valid)
-                    4'h2: begin //read tx status
+                    ADDR_TX_STAT: begin //read tx status
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[TX_STATUS]}; 
                     end
-                    4'h4: begin //read rx buffer
+                    ADDR_RX_BUF: begin //read rx buffer
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[RX_BUFFER]};
                         rx_read = 1'b1;
                     end
-                    4'h6: begin //read rx status
+                    ADDR_RX_STAT: begin //read rx status
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[RX_STATUS]}; 
                     end
-                    4'h8: begin //read baud value
+                    ADDR_BAUD_DIV: begin //read baud value
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[BAUD_DIV]}; 
                     end
-                    4'hA: begin //read baud enable status
+                    ADDR_CTRL_EN: begin //read baud enable status
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[ENABLE_REG]};
                     end
                     default: dat_o_reg <= '0;
@@ -181,6 +190,7 @@ module soft_uart#(
             tx_write_fifo <= tx_write;
             baud_gen_load <= baud_load;
             regs[TX_BUFFER][7:0] <= tx_data;
+            regs[CLEAR_REG][7:0] <= clear_reg;
 
         end
     end
@@ -270,6 +280,7 @@ module soft_uart_rx#(
         count_reset = 0;
         count_enable = 0;
         write_fifo = 0;
+        next = current;
 
         unique case(current)
             IDLE: begin
