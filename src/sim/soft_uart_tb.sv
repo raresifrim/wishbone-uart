@@ -3,7 +3,7 @@
 module soft_uart_tb;
 
     // Parameters
-    parameter int FIFO_DEPTH = 16;
+    parameter int FIFO_DEPTH = 8;
     parameter int CLK_PERIOD = 10; // 100MHz
     
     localparam logic [9:0] ADDR_TX_BUF    = 10'h0;
@@ -54,25 +54,25 @@ module soft_uart_tb;
         
         $display("[External] Sending byte 0x%h to RX line", data);
         
+        @(posedge dut.tx_clk); //simulate the fact that we will start transmission on the rising edge of a similar tx clk
         // Start bit
         rx = 0;
-        #(bit_period);
         
         // Data bits (LSB first)
         for (int i = 0; i < 8; i++) begin
+            @(posedge dut.tx_clk);
             rx = data[i];
-            #(bit_period);
         end
         
         // Stop bit
+        @(posedge dut.tx_clk);
         rx = 1;
-        #(bit_period);
     endtask
 
     // --- Main Test Sequence ---
     logic [31:0] read_data;
-    int test_baud_div = 100; // Small value for faster simulation
-    logic [7:0] test_data [6] = {8'hDE, 8'hAD, 8'hBE, 8'hEF, 8'hC0, 8'hDE};
+    int test_baud_div = 120; // Small value for faster simulation
+    logic [7:0] test_data [8] = {8'hDE, 8'hAD, 8'hBE, 8'hEF, 8'hC0, 8'hDE, 8'hA5, 8'h5A};
 
     initial begin
         // Initialize signals
@@ -92,11 +92,11 @@ module soft_uart_tb;
 
         // 3. Test TX (Write to FIFO and wait for completion)
         $display("--- Testing TX Path ---");
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'hA5);
+        wb_bus.MasterWrite(ADDR_TX_BUF, 32'h6C);
         wait(tx_done);
         $display("TX Done pulsed.");
         
-        wb_bus.MasterWrite(ADDR_TX_BUF, 32'h5A);
+        wb_bus.MasterWrite(ADDR_TX_BUF, 32'h33);
         wait(tx_done);
         $display("TX Done pulsed.");
 
@@ -132,6 +132,7 @@ module soft_uart_tb;
         
         #(CLK_PERIOD);
 
+        //Now sent sequential data packets and read them on the other side as soon as possible
         foreach(test_data[i]) begin
             drive_external_rx(test_data[i], test_baud_div);
         end
@@ -139,6 +140,7 @@ module soft_uart_tb;
         foreach(test_data[i]) begin
             wb_bus.MasterRead(ADDR_RX_STAT, read_data);
             if(read_data[0] == 1) begin //if empty wait for data to be received
+                $display("RX FIFO empty, waiting for new data...");
                 wait(rx_done);
             end   
             wb_bus.MasterRead(ADDR_RX_BUF, read_data); 
@@ -149,8 +151,6 @@ module soft_uart_tb;
                 $stop;
             end
         end
-
-        #(CLK_PERIOD * 10 * test_baud_div); //make sure one last date frame time has passed for last dataframe transmitted
 
         // 5. Test FIFO Clear
         $display("--- Testing FIFO Clear ---");
@@ -164,12 +164,27 @@ module soft_uart_tb;
             $display("ERROR: RX FIFO was not cleared!");
             $stop;
         end
+
+        // 6. Finally, now sent sequential data packets and don't read them to check that fifo becomes full
+        foreach(test_data[i]) begin
+            drive_external_rx(test_data[i], test_baud_div);
+        end
+
+        #(CLK_PERIOD * test_baud_div * 10); //make sure one last date frame time has passed for last dataframe transmitted
+
+        wb_bus.MasterRead(ADDR_RX_STAT, read_data);
+        if(read_data[1] == 0) begin
+            $display("ERROR: FIFO should be full at this point");
+            $stop;
+        end 
         
 
         $display("Testbench Finished.");
         $finish;
     end
 
+
+    //listen for incoming data on the tx line
     bit [7:0] received_char;
     initial begin
         #(CLK_PERIOD * 10); //wait for reset to kick in and do its job

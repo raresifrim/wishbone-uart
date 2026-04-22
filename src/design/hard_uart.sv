@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 typedef enum bit [2:0] {IDLE, START, DATA, PARITY, STOP} fsm_state;
 
 module hard_uart #(
@@ -130,7 +132,7 @@ module hard_uart_rx #(
     end 
     assign counter_full  = counter == CLK_TICK-1;
     assign counter_at_half  = counter == CLK_TICK/2;
-    assign count_reset = (current == IDLE && counter_at_half) || counter_full;
+    assign count_reset = (current == IDLE && (counter_at_half || rx_sync[1])) || counter_full;
 
     always_comb begin
 
@@ -142,7 +144,7 @@ module hard_uart_rx #(
         unique case(current) inside
             IDLE: begin
                 count_up = ~rx_sync[1];
-                if (counter_at_half)
+                if (counter_at_half) //not 
                     next = DATA;
             end
 

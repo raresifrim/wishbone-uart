@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module soft_uart#(
     parameter int FIFO_DEPTH=16,
     parameter int DEBUG=0
@@ -50,10 +52,7 @@ module soft_uart#(
     logic rx_clear_fifo, rx_read_fifo, rx_empty, rx_full, rx_reset;
     logic [7:0] rx_data;
     assign rx_reset = reset | ~regs[ENABLE_REG][2];
-    assign regs[RX_STATUS][0] = rx_empty;
-    assign regs[RX_STATUS][1] = rx_full;
     assign rx_clear_fifo = regs[CLEAR_REG][1];
-    assign regs[RX_BUFFER][7:0] = rx_data;
 
     soft_uart_rx#(
         .DEPTH(FIFO_DEPTH),
@@ -75,8 +74,6 @@ module soft_uart#(
     logic tx_full, tx_empty, tx_clear_fifo, tx_write_fifo, tx_reset;
     logic [7:0] tx_data;
     assign tx_reset = reset | ~regs[ENABLE_REG][1];
-    assign regs[TX_STATUS][0] = tx_empty;
-    assign regs[TX_STATUS][1] = tx_full;
     assign tx_clear_fifo = regs[CLEAR_REG][0];
     assign tx_data = regs[TX_BUFFER][7:0];
 
@@ -100,7 +97,8 @@ module soft_uart#(
     logic [15:0] baud_gen_div;
     assign baud_gen_ce = regs[ENABLE_REG][0];
     assign baud_gen_div = regs[BAUD_DIV];
-    baud_gen baud_gen_inst(
+    
+    baud_gen baud_gen_inst (
         .sys_clk(sys_clk),
         .ce(baud_gen_ce),
         .load(baud_gen_load),
@@ -156,7 +154,7 @@ module soft_uart#(
                             baud_load = 1'b1;
                         end
                         ADDR_CTRL_EN: begin //write to the the enable reg
-                            regs[ENABLE_REG][7:0] <= dat_i_reg[7:0];
+                            regs[ENABLE_REG] <= {8'd0,dat_i_reg[7:0]};
                         end
                         ADDR_CTRL_CLR: begin //write to the the clear reg
                             clear_reg = dat_i_reg[7:0];
@@ -189,12 +187,15 @@ module soft_uart#(
             rx_read_fifo <= rx_read;
             tx_write_fifo <= tx_write;
             baud_gen_load <= baud_load;
-            regs[TX_BUFFER][7:0] <= tx_data;
-            regs[CLEAR_REG][7:0] <= clear_reg;
-
+            regs[TX_BUFFER] <= {8'd0,tx_data};
+            regs[CLEAR_REG] <= {8'd0,clear_reg};
+            regs[RX_BUFFER] <= {8'd0,rx_data};
         end
     end
 
+    //this one needs to be combinational to signal empty/full status as soon as possible
+    assign regs[RX_STATUS] = {14'd0,rx_full,rx_empty};
+    assign regs[TX_STATUS] = {14'd0,tx_full,tx_empty};
 
 endmodule
 
@@ -215,8 +216,8 @@ module soft_uart_rx#(
     output logic rx_full
 );
 
-    logic [2:0] sample_counter = 3'b111;
-    logic [3:0] bit_counter = 4'd7;
+    logic [3:0] sample_counter = 4'b1111;
+    logic [3:0] bit_counter = 4'd8;
     logic [7:0] shift_reg = 0;
     logic [1:0] rx_sync = 2'b11;
     logic count_enable, count_reset;
@@ -233,7 +234,7 @@ module soft_uart_rx#(
     
     always_ff@(posedge rx_clk) begin
         if(reset) begin
-            sample_counter <= 3'b111;
+            sample_counter <= 4'b1111;
             current <= IDLE;
             rx_sync <= 2'b11;
             shift_reg <= 0;
@@ -244,17 +245,17 @@ module soft_uart_rx#(
             //fsm state updater
             current <= next;
            
-            //colect votes
-            if (sample_counter == 3'd3)
+            //colect votes at the end of the counter
+            if (sample_counter == 4'd3)
                 vote_bits[0] <= rx_sync[1];
-            if (sample_counter == 3'd4)
+            if (sample_counter == 4'd2)
                 vote_bits[1] <= rx_sync[1];
-            if (sample_counter == 3'd5)
+            if (sample_counter == 4'd1)
                 vote_bits[2] <= rx_sync[1];
 
             //sample counter logic
             if(count_reset)
-                sample_counter <= 3'b111;
+                sample_counter <= 4'b1111;
             else if(count_enable)
                 sample_counter <= sample_counter - 1'b1;
 
@@ -284,11 +285,9 @@ module soft_uart_rx#(
 
         unique case(current)
             IDLE: begin
-                if(!rx_sync[1])
-                    count_enable = 1;
-                else
-                   count_reset = 1; 
-                if(collect_bit && !final_vote)
+                count_enable = !rx_sync[1];
+                count_reset = rx_sync[1] || (sample_counter == 4'd7); 
+                if(sample_counter == 4'd7 && !rx_sync[1]) //if we reached half of the sampling and rx is 0 then we consider it a start bit
                     next = DATA;
                 else
                     next = IDLE;
@@ -426,7 +425,7 @@ module soft_uart_tx #(
         .wclk(sys_clk),
         .rst(reset),
         .i_clear(clear_fifo),
-        .i_wr_en(write_fifo),    // Write enable
+        .i_wr_en(write_fifo & ~tx_full),    // Write enable
         .i_rd_en(tx_start),    // Read enable
         .i_data(data),     // Data written into FIFO
         .o_data(tx_data),     // Data read from FIFO
@@ -451,13 +450,13 @@ module baud_gen(
 
     always_ff@(posedge sys_clk) begin
         if(load) begin
-            rx_counter <= (div >> 3);
+            rx_counter <= (div >> 4);
             tx_counter <= div;
             div_reg <= div;
         end
         else if(ce) begin
             if(rx_counter == 0)
-                rx_counter <= (div_reg >> 3);
+                rx_counter <= (div_reg >> 4);
             else
                 rx_counter <= rx_counter - 1'b1;
             if(tx_counter == 0)
@@ -468,6 +467,6 @@ module baud_gen(
     end
 
     assign tx_clk = tx_counter > (div_reg >> 1) ? 1'b1 : 1'b0;
-    assign rx_clk = rx_counter > (div_reg >> 4) ? 1'b1 : 1'b0;
+    assign rx_clk = rx_counter > (div_reg >> 5) ? 1'b1 : 1'b0;
 
 endmodule

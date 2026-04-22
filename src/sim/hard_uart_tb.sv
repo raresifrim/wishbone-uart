@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module hard_uart_tb();
 
     localparam int CLK_FREQ_MHZ = 12;

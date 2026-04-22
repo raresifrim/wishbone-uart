@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module async_fifo #(
         parameter int DEPTH=16, 
         parameter type DATA_T = bit [7:0],
@@ -16,9 +18,11 @@ module async_fifo #(
         output logic                     o_full     // FIFO is full when high,
     );
 
+    localparam AW = $clog2(DEPTH); 
+
     //one extra bit for computing full and empty
-    logic [$clog2(DEPTH):0] wptr, wgray, wsync1, wsync2;
-    logic [$clog2(DEPTH):0] rptr, rgray, rsync1, rsync2; 
+    logic [AW:0] wptr, wgray, wsync1, wsync2;
+    logic [AW:0] rptr, rgray, rsync1, rsync2; 
     logic w_empty, w_full;
     logic nreset;
     DATA_T fifo [DEPTH];
@@ -44,15 +48,15 @@ module async_fifo #(
         if (master_reset) begin
             wptr <= 0;
             wgray <= 0;
-            o_full <= 0;
         end
         else begin
-            logic [$clog2(DEPTH):0] wbin; 
+            logic [AW:0] wbin; 
             wbin = wptr + 1'(i_wr_en & !o_full); 
             wptr <= wbin;
             wgray <= (wbin >> 1) ^ wbin;
-            fifo[wptr[$clog2(DEPTH)-1:0]] <= i_data;
-            o_full <= w_full;
+            //make sure we don't actually overwrite otherwise we might loose early data that wasn't sent
+            if(i_wr_en & !o_full)
+                fifo[wptr[AW-1:0]] <= i_data;
         end 
     end
 
@@ -60,22 +64,21 @@ module async_fifo #(
         if (master_reset) begin
             rptr <= 0;
             rgray <= 0;
-            o_empty <= 0;
             o_data <= 0;
         end
         else begin 
-            logic [$clog2(DEPTH):0] rbin; 
+            logic [AW:0] rbin; 
             rbin = rptr + 1'(i_rd_en & !o_empty); 
             rptr <= rbin;
             rgray <= (rbin >> 1) ^ rbin;
-            o_empty <= w_empty;
-            o_data <= fifo[rptr[$clog2(DEPTH)-1:0]];
+            o_data <= fifo[rptr[AW-1:0]];
         end
     end
 
     //technique seen @sunburst design
-    assign w_full  = rsync2 == {~wgray[$clog2(DEPTH)], wgray[$clog2(DEPTH)-1:0]};
-    assign w_empty = rgray == wsync2;
+    assign o_full = (wgray[AW:AW-1] == ~rsync2[AW:AW-1])
+				&& (wgray[AW-2:0]==rsync2[AW-2:0]);
+    assign o_empty = (rgray == wsync2);
 
     initial begin
         if (DEBUG)
