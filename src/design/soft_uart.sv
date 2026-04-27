@@ -15,7 +15,7 @@ module soft_uart#(
 
     localparam type data_t = bit [wbif.DATA_WIDTH-1:0];
     logic rx_clk, tx_clk;
-    logic [15:0]  regs [7];
+    logic [15:0] regs [7];
     //TX BUFFER OFFSET - 0x0 (WRITE ONLY) REG0
     //TX STATUS OFFSET - 0x2 (READ ONLY) REG1
     //RX BUFFER OFFSET - 0x4 (READ ONLY) REG2

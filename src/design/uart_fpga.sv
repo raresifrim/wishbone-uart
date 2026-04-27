@@ -47,7 +47,7 @@ module top_soft_uart_fpga#(
   output logic tx_done
 );
 
-  localparam bit [15:0] DIVIDER = (CLK_FREQ_MHZ * (10**6)) / BAUD_RATE;
+  localparam bit   [31:0] DIVIDER = (CLK_FREQ_MHZ * (10**6)) / BAUD_RATE;
   localparam logic [31:0] ADDR_TX_BUF    = 32'h0;
   localparam logic [31:0] ADDR_TX_STAT   = 32'h2;
   localparam logic [31:0] ADDR_RX_BUF    = 32'h4;
@@ -81,10 +81,6 @@ module top_soft_uart_fpga#(
 
     always_comb begin
 
-      //default values for bus and next state
-      wbIf.wb_end_req();
-      next = current;
-      
       unique case(current)
         INIT_BAUD: begin
           wbIf.wb_write_req(ADDR_BAUD_DIV, DIVIDER);
@@ -100,6 +96,9 @@ module top_soft_uart_fpga#(
           if(rx_done) begin
             next = READ_AND_WRITE;
             wbIf.wb_read_req(ADDR_RX_BUF);
+          end else begin
+            wbIf.wb_end_req();
+            next = WAIT;
           end
         end
 
@@ -108,8 +107,15 @@ module top_soft_uart_fpga#(
             wbIf.wb_write_req(ADDR_TX_BUF, wbIf.data_rd);
             next = WAIT;
           end
+          else begin
+            wbIf.wb_end_req();
+            next = READ_AND_WRITE;
+          end
         end
-
+        default: begin
+          wbIf.wb_end_req();
+          next = WAIT;
+        end
       endcase
     end
   
