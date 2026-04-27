@@ -49,12 +49,9 @@ module top_soft_uart_fpga#(
 
   localparam bit   [31:0] DIVIDER = (CLK_FREQ_MHZ * (10**6)) / BAUD_RATE;
   localparam logic [31:0] ADDR_TX_BUF    = 32'h0;
-  localparam logic [31:0] ADDR_TX_STAT   = 32'h2;
   localparam logic [31:0] ADDR_RX_BUF    = 32'h4;
-  localparam logic [31:0] ADDR_RX_STAT   = 32'h6;
   localparam logic [31:0] ADDR_BAUD_DIV  = 32'h8;
   localparam logic [31:0] ADDR_CTRL_EN   = 32'hA;
-  localparam logic [31:0] ADDR_CTRL_CLR  = 32'hC;
   
   wishboneIf#(.DATA_T(bit[31:0]), .ADDR_WIDTH(32)) wbIf(sys_clk);
 
@@ -68,7 +65,6 @@ module top_soft_uart_fpga#(
     .tx_done(tx_done)
   );
 
-    logic [7:0] data;
     typedef enum bit[1:0] {INIT_BAUD, ENABLE, WAIT, READ_AND_WRITE} fsm;
     fsm current = INIT_BAUD, next;
 

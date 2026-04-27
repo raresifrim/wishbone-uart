@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module soft_uart#(
-    parameter int FIFO_DEPTH=16,
+    parameter int FIFO_DEPTH=8,
     parameter int DEBUG=0
 )(
     input logic sys_clk,
@@ -15,7 +15,8 @@ module soft_uart#(
 
     localparam type data_t = bit [wbif.DATA_WIDTH-1:0];
     logic rx_clk, tx_clk;
-    logic [15:0] regs [7];
+    logic [15:0] regs [5];
+    
     //TX BUFFER OFFSET - 0x0 (WRITE ONLY) REG0
     //TX STATUS OFFSET - 0x2 (READ ONLY) REG1
     //RX BUFFER OFFSET - 0x4 (READ ONLY) REG2
@@ -27,7 +28,7 @@ module soft_uart#(
     //CLEAR CONTROL OFFSET - 0xC (WRITE ONLY)REG6
     //ENABLE CONTROL BITS: 1-Clear_RX_fifo 2-Clear_TX_fifo
 
-    enum bit [2:0] {TX_BUFFER, TX_STATUS, RX_BUFFER, RX_STATUS, BAUD_DIV, ENABLE_REG, CLEAR_REG} CAS;
+    enum bit [2:0] {TX_BUFFER, RX_BUFFER, BAUD_DIV, ENABLE_REG, CLEAR_REG} CAS;
     localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_TX_BUF    = wbif.ADDR_WIDTH'(0);
     localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_TX_STAT   = wbif.ADDR_WIDTH'(2);
     localparam logic [wbif.ADDR_WIDTH-1:0] ADDR_RX_BUF    = wbif.ADDR_WIDTH'(4);
@@ -116,7 +117,7 @@ module soft_uart#(
             we_i_reg <= '0;
             dat_i_reg <= '0;
             dat_o_reg <= '0;
-            for(int i=0;i<6;i++)
+            for(int i=0;i<5;i++)
                 regs[i] <= '0;
             rx_read_fifo <= '0;
             tx_write_fifo <= '0;
@@ -163,14 +164,14 @@ module soft_uart#(
                 end
                 unique case(adr_i_valid)
                     ADDR_TX_STAT: begin //read tx status
-                        dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[TX_STATUS]}; 
+                        dat_o_reg <= {{(wbif.DATA_WIDTH-2){1'b0}}, tx_full,tx_empty}; 
                     end
                     ADDR_RX_BUF: begin //read rx buffer
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[RX_BUFFER]};
                         rx_read = 1'b1;
                     end
                     ADDR_RX_STAT: begin //read rx status
-                        dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[RX_STATUS]}; 
+                        dat_o_reg <= {{(wbif.DATA_WIDTH-2){1'b0}}, rx_full,rx_empty}; 
                     end
                     ADDR_BAUD_DIV: begin //read baud value
                         dat_o_reg <= {{(wbif.DATA_WIDTH-16){1'b0}}, regs[BAUD_DIV]}; 
@@ -192,10 +193,6 @@ module soft_uart#(
             regs[RX_BUFFER] <= {8'd0,rx_data};
         end
     end
-
-    //this one needs to be combinational to signal empty/full status as soon as possible
-    assign regs[RX_STATUS] = {14'd0,rx_full,rx_empty};
-    assign regs[TX_STATUS] = {14'd0,tx_full,tx_empty};
 
 endmodule
 
@@ -351,7 +348,6 @@ module soft_uart_tx #(
 
     logic [7:0] shift_reg, tx_data;
     fsm_state current = IDLE, next;
-    logic tx_wire;
     logic tx_start;
     logic send_bit;
     logic [2:0] bit_counter = 3'd7; 
@@ -463,10 +459,10 @@ module baud_gen(
                 tx_counter <= div_reg;
             else
                 tx_counter <= tx_counter - 1'b1;
+                
+            tx_clk <= tx_counter > (div_reg >> 1) ? 1'b1 : 1'b0;
+            rx_clk <= rx_counter > (div_reg >> 5) ? 1'b1 : 1'b0;
         end
     end
-
-    assign tx_clk = tx_counter > (div_reg >> 1) ? 1'b1 : 1'b0;
-    assign rx_clk = rx_counter > (div_reg >> 5) ? 1'b1 : 1'b0;
 
 endmodule

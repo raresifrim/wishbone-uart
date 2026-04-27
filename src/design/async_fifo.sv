@@ -22,9 +22,7 @@ module async_fifo #(
 
     //one extra bit for computing full and empty
     logic [AW:0] wptr, wgray, wsync1, wsync2;
-    logic [AW:0] rptr, rgray, rsync1, rsync2; 
-    logic w_empty, w_full;
-    logic nreset;
+    logic [AW:0] rptr, rgray, rsync1, rsync2;
     DATA_T fifo [DEPTH];
 
     logic master_reset;
