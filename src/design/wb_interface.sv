@@ -48,6 +48,35 @@ interface wishboneIf #(
         input err
     );
 
+    //functions for synthesis purposes
+    function automatic void wb_write_req(logic [ADDR_WIDTH-1:0] address, DATA_T data);
+        addr = address;
+        data_wr = data;
+        we  = '1;
+        sel = '1;
+        stb = '1;
+        cyc = '1;    
+    endfunction
+
+    function automatic void wb_read_req(logic [ADDR_WIDTH-1:0] address);
+        addr = address;
+        we  = '0;
+        sel = '1;
+        stb = '1;
+        cyc = '1;
+        data_wr = '0;    
+    endfunction
+
+    function automatic void wb_end_req();
+        addr = '0;
+        data_wr = '0;
+        we  = '0;
+        sel = '0;
+        stb = '0;
+        cyc = '0;
+    endfunction
+
+    //Tasks for simulation purposes
     task automatic MasterWrite (input logic[ADDR_WIDTH-1:0] waddr, input DATA_T wdata);
         if(stall)
             $display("Downstream module is busy, waiting for it to become ready before sending write request");

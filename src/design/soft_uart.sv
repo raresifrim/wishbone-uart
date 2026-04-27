@@ -246,11 +246,11 @@ module soft_uart_rx#(
             current <= next;
            
             //colect votes at the end of the counter
-            if (sample_counter == 4'd3)
+            if (sample_counter == 4'd6)
                 vote_bits[0] <= rx_sync[1];
-            if (sample_counter == 4'd2)
+            if (sample_counter == 4'd7)
                 vote_bits[1] <= rx_sync[1];
-            if (sample_counter == 4'd1)
+            if (sample_counter == 4'd8)
                 vote_bits[2] <= rx_sync[1];
 
             //sample counter logic
@@ -286,8 +286,8 @@ module soft_uart_rx#(
         unique case(current)
             IDLE: begin
                 count_enable = !rx_sync[1];
-                count_reset = rx_sync[1] || (sample_counter == 4'd7); 
-                if(sample_counter == 4'd7 && !rx_sync[1]) //if we reached half of the sampling and rx is 0 then we consider it a start bit
+                count_reset = rx_sync[1] || (sample_counter == 4'd8); 
+                if(sample_counter == 4'd8 && !rx_sync[1]) //if we reached half of the sampling and rx is 0 then we consider it a start bit
                     next = DATA;
                 else
                     next = IDLE;
