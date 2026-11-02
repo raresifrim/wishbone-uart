@@ -37,7 +37,7 @@ module fsm_uart_tb();
         #(CLK_PERIOD*4); //wait for initialization of the FSM
 
         //start transmiting the message
-        foreach (msg[i]) begin
+        for (int i = 0; i < msg.len(); i++) begin
             char = msg[i];
 
             rx = 0; //send start bit

@@ -33,7 +33,7 @@ module soft_uart_tb;
         .reset(reset),
         .rx(rx),
         .tx(tx),
-        .wbif(wb_bus.Slave),
+        .wbif(wb_bus),
         .rx_done(rx_done),
         .tx_done(tx_done)
     );
@@ -72,7 +72,7 @@ module soft_uart_tb;
     // --- Main Test Sequence ---
     logic [31:0] read_data;
     int test_baud_div = 120; // Small value for faster simulation
-    logic [7:0] test_data [8] = {8'hDE, 8'hAD, 8'hBE, 8'hEF, 8'hC0, 8'hDE, 8'hA5, 8'h5A};
+    logic [7:0] test_data [8] = '{8'hDE, 8'hAD, 8'hBE, 8'hEF, 8'hC0, 8'hDE, 8'hA5, 8'h5A};
 
     initial begin
         // Initialize signals

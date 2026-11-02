@@ -1,0 +1,12 @@
+# compile verilog/system verilog design source files
+sv xil_defaultlib  --include "../../../../../../../../../../../tools/Xilinx/2025.2/data/rsb/busdef" \
+"../../../../../src/design/async_fifo.sv" \
+"../../../../../src/design/soft_uart.sv" \
+"../../../../../src/design/wb_interface.sv" \
+"../../../../../src/sim/soft_uart_tb.sv" \
+
+# compile glbl module
+verilog xil_defaultlib "glbl.v"
+
+# Do not sort compile order
+nosort

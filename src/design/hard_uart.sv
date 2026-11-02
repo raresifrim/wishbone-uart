@@ -6,7 +6,7 @@ module hard_uart #(
     parameter int DATA_FRAME = 8,
     parameter int BAUD_RATE = 9600,
     parameter int CLK_FREQ_MHZ = 12,
-    parameter string PARITY_BIT = "NONE" //NONE/ODD/EVEN
+    parameter PARITY_BIT = "NONE" //NONE/ODD/EVEN
 )(
     input logic sys_clk,
     input logic reset,
@@ -54,7 +54,7 @@ module hard_uart_rx #(
     parameter int DATA_FRAME = 8,
     parameter int BAUD_RATE = 9600,
     parameter int CLK_FREQ_MHZ = 12,
-    parameter string PARITY_BIT = "NONE" //NONE/ODD/EVEN
+    parameter PARITY_BIT = "NONE" //NONE/ODD/EVEN
 )(
     input logic sys_clk,
     input logic reset,
@@ -141,7 +141,7 @@ module hard_uart_rx #(
         count_up = 0;
         collect_bit = 0;
 
-        unique case(current) inside
+        unique case(current)
             IDLE: begin
                 count_up = ~rx_sync[1];
                 if (counter_at_half) //not 
@@ -186,7 +186,7 @@ module hard_uart_tx#(
     parameter int DATA_FRAME = 8,
     parameter int BAUD_RATE = 9600,
     parameter int CLK_FREQ_MHZ = 12,
-    parameter string PARITY_BIT = "NONE" //NONE/ODD/EVEN
+    parameter PARITY_BIT = "NONE" //NONE/ODD/EVEN
 )(
     input logic sys_clk,
     input logic reset,
@@ -250,7 +250,7 @@ module hard_uart_tx#(
         next = current;
         tx = 1;
 
-        unique case(current) inside
+        unique case(current)
             IDLE: begin
                 tx = 1;
                 if(start)

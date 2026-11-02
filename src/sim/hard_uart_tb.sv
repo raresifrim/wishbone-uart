@@ -4,7 +4,7 @@ module hard_uart_tb();
 
     localparam int CLK_FREQ_MHZ = 12;
     localparam int BAUD_RATE = 115200;
-    localparam string PARITY_BIT = "ODD";
+    localparam PARITY_BIT = "ODD";
     localparam int CLK_TICKS = (CLK_FREQ_MHZ * (10**6)) / BAUD_RATE;
     localparam int CLK_PERIOD = 10;
 
@@ -13,6 +13,7 @@ module hard_uart_tb();
     logic rx_done, tx_done;
     bit [7:0] char;
     bit parity_bit;
+    int received_count = 0;
 
     string msg = "HELLO WORLD!";
 
@@ -39,7 +40,7 @@ module hard_uart_tb();
         #CLK_PERIOD;
 
         //start transmiting the message
-        foreach (msg[i]) begin
+        for (int i = 0; i < msg.len(); i++) begin
             char = msg[i];
             parity_bit = (PARITY_BIT == "EVEN" && ^char == 1'b1) || (PARITY_BIT == "ODD" && ^char == 1'b0) ? 1'b1 : 1'b0;
 
@@ -68,7 +69,15 @@ module hard_uart_tb();
                 #CLK_PERIOD; 
         end
         
-        #(CLK_PERIOD*11);
+        //wait for every char to be looped back, or give up after two frame times
+        fork
+            wait(received_count == msg.len());
+            begin
+                for (int i=0;i < 2*11*CLK_TICKS; i++)
+                    #CLK_PERIOD;
+                $display("ERROR: timeout, received %0d of %0d chars", received_count, msg.len());
+            end
+        join_any
         $finish;
     end
 
@@ -99,7 +108,8 @@ module hard_uart_tb();
 
             //wait for stop bit
             for (int i=0;i < CLK_TICKS; i++)
-                #CLK_PERIOD;  
+                #CLK_PERIOD;
+            received_count++;
         end
     end
 

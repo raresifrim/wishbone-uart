@@ -95,7 +95,10 @@ puts "\n###Creating sim_build dir###"
 set outputDir ./build/sim
 file mkdir $outputDir
 cd $outputDir
-file delete -force -- {*}[glob -nocomplain *]
+set old_files [glob -nocomplain *]
+if {[llength $old_files] > 0} {
+        file delete -force -- {*}$old_files
+}
 puts "Current working directory: [pwd]"
 
 if {[string match "vivado" $simulator]} {
@@ -137,10 +140,10 @@ if {[string match "vivado" $simulator]} {
         puts "\n###Compiling design and simulation sources using Verilator###"
         set verilator_flags "--binary --build -j 0 -x-assign fast --Wno-fatal --trace --assert --timing -prefix Vtop -top $tb_top"
         set verilator_input ""
-        set verilator_input [concat $verilator_input [glob -nocomplain ../../src/design/*.sv]]
-        set verilator_input [concat $verilator_input [glob -nocomplain ../../src/design/*.v]]
-        set verilator_input [concat $verilator_input [glob -nocomplain ../../src/sim/*.sv]]
-        set verilator_input [concat $verilator_input [glob -nocomplain ../../src/sim/*.v]]
+        set verilator_input [concat $verilator_input [lsort [glob -nocomplain ../../src/design/*.sv]]]
+        set verilator_input [concat $verilator_input [lsort [glob -nocomplain ../../src/design/*.v]]]
+        set verilator_input [concat $verilator_input [lsort [glob -nocomplain ../../src/sim/*.sv]]]
+        set verilator_input [concat $verilator_input [lsort [glob -nocomplain ../../src/sim/*.v]]]
         
         if { [catch {exec sh -c "verilator $verilator_flags $verilator_input" 2> verilator.log} result] } {
                 puts "$::errorInfo"
@@ -156,11 +159,14 @@ if {[string match "vivado" $simulator]} {
                 return
         }
 } elseif {[string match "iverilog" $simulator]} {
+        puts "\n###Compiling design and simulation sources using Icarus Verilog###"
         set iverilog_input ""
-        set iverilog_input [concat $iverilog_input [glob -nocomplain ../../src/sim/*.sv]]
-        set iverilog_input [concat $iverilog_input [glob -nocomplain ../../src/sim/*.v]] 
-        
-        if { [catch {exec sh -c "iverilog -g2012 -I../../src/design -Y.sv -Y.v -y../../src/sim -y../../src/design -s $tb_top -o top.out $iverilog_input" 2> iverilog.log} result] } {
+        set iverilog_input [concat $iverilog_input [lsort [glob -nocomplain ../../src/design/*.sv]]]
+        set iverilog_input [concat $iverilog_input [lsort [glob -nocomplain ../../src/design/*.v]]]
+        set iverilog_input [concat $iverilog_input [lsort [glob -nocomplain ../../src/sim/*.sv]]]
+        set iverilog_input [concat $iverilog_input [lsort [glob -nocomplain ../../src/sim/*.v]]]
+
+        if { [catch {exec sh -c "iverilog -g2012 -I../../src/design -s $tb_top -o top.out $iverilog_input" 2> iverilog.log} result] } {
                 puts "$::errorInfo"
         }
         puts [read [open iverilog.log r]] 
@@ -168,9 +174,9 @@ if {[string match "vivado" $simulator]} {
         set len [llength $files]
         if {$len > 0} {
                 puts "\n###Starting simulation###"
-                exec sh -c "./top.out" >@stdout
+                exec sh -c "vvp top.out" >@stdout
         } else {
-                puts "ERROR encountered during Verilator compile step"
+                puts "ERROR encountered during Icarus Verilog compile step"
                 return
         }
 }

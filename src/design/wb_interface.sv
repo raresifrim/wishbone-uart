@@ -80,7 +80,8 @@ interface wishboneIf #(
     task automatic MasterWrite (input logic[ADDR_WIDTH-1:0] waddr, input DATA_T wdata);
         if(stall)
             $display("Downstream module is busy, waiting for it to become ready before sending write request");
-        @(posedge clk iff stall == '0)
+        @(posedge clk);
+        while (stall) @(posedge clk);
         addr = waddr;
         data_wr = wdata;
         we  = '1;
@@ -99,7 +100,8 @@ interface wishboneIf #(
     task automatic MasterRead (input logic[ADDR_WIDTH-1:0] raddr,output DATA_T rdata);
         if(stall)
             $display("Downstream module is busy, waiting for it to become ready before sending write request");
-        @(posedge clk iff stall == '0)
+        @(posedge clk);
+        while (stall) @(posedge clk);
         addr = raddr;
         data_wr = '0;
         we  = '0;

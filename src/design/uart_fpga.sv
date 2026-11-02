@@ -2,7 +2,7 @@ module top_hard_uart_fpga#(
   parameter int DATA_FRAME = 8,
   parameter int BAUD_RATE = 9600,
   parameter int CLK_FREQ_MHZ = 12,
-  parameter string PARITY_BIT = "NONE" //NONE/ODD/EVEN
+  parameter PARITY_BIT = "NONE" //NONE/ODD/EVEN
 )(
   input logic sys_clk,
   input logic reset,
@@ -55,12 +55,15 @@ module top_soft_uart_fpga#(
   
   wishboneIf#(.DATA_T(bit[31:0]), .ADDR_WIDTH(32)) wbIf(sys_clk);
 
-  soft_uart uart_loopback(
+  soft_uart #(
+    .ADDR_WIDTH(32),
+    .DATA_WIDTH(32)
+  ) uart_loopback(
     .sys_clk(sys_clk),
     .reset(reset),
     .rx(rx),
     .tx(tx),
-    .wbif(wbIf.Slave),
+    .wbif(wbIf),
     .rx_done(rx_done),
     .tx_done(tx_done)
   );

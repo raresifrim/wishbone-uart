@@ -1,0 +1,9 @@
+0.7
+2020.2
+Nov 14 2025
+12:36:23
+/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/async_fifo.sv,1782584898,systemVerilog,/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/soft_uart.sv;/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/wb_interface.sv;/mnt/mac/Users/rares/Projects/wishbone-uart/src/sim/soft_uart_tb.sv,/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/soft_uart.sv,,$unit_async_fifo_sv_1364886032;async_fifo,,uvm,../../../../../../../../../../../tools/Xilinx/2025.2/data/rsb/busdef,,,,,
+/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/soft_uart.sv,1782714921,systemVerilog,,/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/wb_interface.sv,,baud_gen;soft_uart;soft_uart_rx;soft_uart_tx,,uvm,../../../../../../../../../../../tools/Xilinx/2025.2/data/rsb/busdef,,,,,
+/mnt/mac/Users/rares/Projects/wishbone-uart/src/design/wb_interface.sv,1782584898,systemVerilog,,/mnt/mac/Users/rares/Projects/wishbone-uart/src/sim/soft_uart_tb.sv,,wishboneIf,,uvm,../../../../../../../../../../../tools/Xilinx/2025.2/data/rsb/busdef,,,,,
+/mnt/mac/Users/rares/Projects/wishbone-uart/src/sim/soft_uart_tb.sv,1782584898,systemVerilog,,,,soft_uart_tb,,uvm,../../../../../../../../../../../tools/Xilinx/2025.2/data/rsb/busdef,,,,,
+/mnt/mac/Users/rares/Projects/wishbone-uart/xilinx_prj/xilinx_prj.sim/sim_1/behav/xsim/glbl.v,1756381829,verilog,,,,glbl,,uvm,,,,,,
